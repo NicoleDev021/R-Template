@@ -1,0 +1,16 @@
+# SPDX-FileCopyrightText: Copyright (c) 2025 Madison Nicole Goodwin https://github.com/NicoleDev021
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+linters: with_defaults(
+  # Code style
+  line_length_linter = line_length_linter(120),
+  object_name_linter = object_name_linter("camelCase"),
+  assignment_linter = assignment_linter(),
+  
+  # Security-focused linters
+  absolute_path_linter = absolute_path_linter(),
+  
+  # Code quality
+  trailing_whitespace_linter = trailing_whitespace_linter(),
+  trailing_blank_lines_linter = trailing_blank_lines_linter(),
+)

@@ -1,0 +1,56 @@
+{
+  // SPDX-FileCopyrightText: Copyright (c) 2025 Madison Nicole Goodwin https://github.com/NicoleDev021
+  // SPDX-License-Identifier: GPL-3.0-or-later
+
+  "name": "R Security Development Environment",
+  "image": "ghcr.io/rocker-org/devcontainer-features/r-apt:latest",
+  
+  "features": {
+    "ghcr.io/rocker-org/devcontainer-features/r-apt:0.5.0": {
+      "version": "4.3",
+      "vscodeRSupport": true,
+      "installDevtools": true,
+      "installRMarkdown": true
+    },
+    "ghcr.io/devcontainers/features/common-utils:2": {
+      "upgradePackages": true,
+      "username": "vscode",
+      "userUid": "1000",
+      "userGid": "1000"
+    }
+  },
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "REditorSupport.r",
+        "REditorSupport.r-syntax",
+        "quarto-dev.quarto"
+      ],
+      "settings": {
+        "r.rterm.linux": "/usr/bin/R",
+        "r.bracketedPaste": true,
+        "r.plot.useHttpgd": true,
+        "terminal.integrated.defaultProfile.linux": "bash"
+      }
+    }
+  },
+
+  "onCreateCommand": [
+    "bash",
+    ".devcontainer/setup.sh"
+  ],
+
+  "postCreateCommand": [
+    "bash",
+    ".devcontainer/post-create.sh"
+  ],
+
+  "forwardPorts": [8000, 3000],
+
+  "remoteUser": "vscode",
+
+  "mounts": [
+    "source=${localWorkspaceFolder}/.Rprofile,target=/home/vscode/.Rprofile,type=bind,consistency=cached"
+  ]
+}

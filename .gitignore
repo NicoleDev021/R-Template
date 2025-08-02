@@ -1,1 +1,113 @@
-# Add patterns here to exclude files from version control as needed
+# SPDX-FileCopyrightText: Copyright (c) 2025 Madison Nicole Goodwin https://github.com/NicoleDev021
+# SPDX-License-Identifier: GPL-3.0-or-later
+
+# R-specific gitignore patterns for secure development
+
+# R session files
+.RData
+.Rhistory
+.Rapp.history
+
+# Session Data files
+.RDataTmp
+
+# User-specific files
+.Ruserdata
+
+# R Environment Variables
+.Renviron
+
+# R temporary files
+*.tmp
+*.temp
+
+# R package development
+*.tar.gz
+*.Rcheck/
+.Rd2pdf*
+.Rproj.user/
+
+# R output files
+*.out
+*.pdf
+*.html
+
+# R cache directories
+*_cache/
+/cache
+*.cache
+
+# Knitr/R Markdown output
+*.nb.html
+*_files/
+
+# R plots
+Rplots.pdf
+
+# OAuth2 token - SECURITY CRITICAL
+.httr-oauth
+
+# Shiny token - SECURITY CRITICAL  
+rsconnect/
+
+# Temporary files
+*~
+*.swp
+*.swo
+
+# Mac OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Windows
+*.stackdump
+
+# IDE files
+.vscode/settings.json
+.idea/
+*.Rproj
+
+# Development and testing
+development/scratch/
+development/temp/
+*.debug
+
+# Environment files - SECURITY CRITICAL
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Secrets and certificates - SECURITY CRITICAL
+*.key
+*.pem
+*.p12
+*.pfx
+secrets/
+.secrets
+
+# Package-specific (legacy - kept for compatibility)
+packrat/lib*/
+packrat/src/
+
+# Logs and databases
+*.log
+*.sql
+*.sqlite
+*.db
+
+# Data files (user-specific - adjust as needed)
+data/private/
+*.csv
+*.xlsx
+*.rds
+*.rda
+
+# Security scan results (GitHub Actions artifacts)
+*.sarif
+trivy-results.json

@@ -5,12 +5,13 @@ title: '[BUG] '
 labels: ['bug']
 assignees: ''
 ---
+
 ## Describe the bug
 <!--A clear and concise description of what the bug is.-->
 
 ## Steps to Reproduce
-<!--Please provide step-by-step instructions to reproduce the security issue.
-Include any relevant code, requests, or scenarios.-->
+<!--Please provide step-by-step instructions to reproduce the bug.
+Include any relevant code, configuration, or scenarios.-->
 1. 
 
 ## Expected Behavior
@@ -35,4 +36,4 @@ Include any relevant code, requests, or scenarios.-->
  - Version: <!--[e.g. 22]-->
 
 ## Additional Context
-<!--Add any other context, logs, or screenshots about the security bug here.-->
+<!--Add any other context, logs, or screenshots about the bug here.-->

@@ -5,6 +5,7 @@ title: '[SECURITY] '
 labels: ['security']
 assignees: ''
 ---
+
 **IMPORTANT:**  
 Please provide as much detail as possible while omitting sensitive exploit details from the public issue body. If you prefer not to disclose certain information publicly, indicate in your issue that you’d like to continue the discussion privately. A project maintainer will then reach out to coordinate a private discussion.
 
