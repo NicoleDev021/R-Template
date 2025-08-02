@@ -20,7 +20,7 @@ jobs:
     permissions:
       contents: read
       security-events: write
-      pull-requests: write
+      issues: write
     
     env:
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
@@ -70,7 +70,7 @@ jobs:
         for (pkg in packages) {
           tryCatch({
             if (!require(pkg, character.only = TRUE, quietly = TRUE)) {
-              install.packages(pkg, repos = c(CRAN = 'https://cloud.r-project.org'))
+              install.packages(pkg, repos = c(CRAN = 'https://cloud.r-project.org'), type = "source")
               cat("✓ Installed:", pkg, "\n")
             } else {
               cat("✓ Already available:", pkg, "\n")
@@ -364,16 +364,19 @@ jobs:
     - name: Generate comprehensive report
       if: always()
       run: |
-        cat("# R Security & Analysis Report\n\n") > security-analysis-report.md
-        cat("Generated: $(date)\n\n") >> security-analysis-report.md
+        echo "# R Security & Analysis Report" > security-analysis-report.md
+        echo "" >> security-analysis-report.md
+        echo "Generated: $(date)" >> security-analysis-report.md
+        echo "" >> security-analysis-report.md
         
         # R Environment info
-        cat("## Environment\n") >> security-analysis-report.md
+        echo "## Environment" >> security-analysis-report.md
         R --version | head -1 >> security-analysis-report.md
         echo "" >> security-analysis-report.md
         
         # Step results summary
-        cat("## Analysis Results Summary\n\n") >> security-analysis-report.md
+        echo "## Analysis Results Summary" >> security-analysis-report.md
+        echo "" >> security-analysis-report.md
         
         echo "| Component | Status | Notes |" >> security-analysis-report.md
         echo "|-----------|--------|-------|" >> security-analysis-report.md
@@ -388,7 +391,8 @@ jobs:
         echo "" >> security-analysis-report.md
         
         # Detailed findings
-        cat("## Detailed Findings\n\n") >> security-analysis-report.md
+        echo "## Detailed Findings" >> security-analysis-report.md
+        echo "" >> security-analysis-report.md
         
         if [ -f "oyster-audit-results.rds" ]; then
           echo "- ✓ R package security audit completed" >> security-analysis-report.md
