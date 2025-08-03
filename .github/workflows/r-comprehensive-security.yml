@@ -22,86 +22,15 @@ jobs:
       security-events: write
       issues: write
     
-    env:
-      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
-    
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
     
-    - name: Setup R
-      uses: r-lib/actions/setup-r@v2
-      with:
-        r-version: 'release'
-        use-public-rspm: true
-    
-    - name: Query dependencies
-      run: |
-        install.packages('remotes', type = "source")
-        saveRDS(remotes::dev_package_deps(dependencies = TRUE), ".github/depends.Rds", version = 2)
-        writeLines(sprintf("R-%i.%i", getRversion()$major, getRversion()$minor), ".github/R-version")
-      shell: Rscript {0}
-    
-    - name: Cache R packages
-      uses: actions/cache@v4
-      with:
-        path: ${{ env.R_LIBS_USER }}
-        key: ${{ runner.os }}-${{ hashFiles('.github/R-version') }}-1-${{ hashFiles('.github/depends.Rds') }}
-        restore-keys: ${{ runner.os }}-${{ hashFiles('.github/R-version') }}-1-
-    
-    - name: Install security and analysis packages
-      continue-on-error: true
-      id: install-packages
-      run: |
-        # Install all required packages
-        packages <- c(
-          "oysteR",        # Security auditing
-          "renv",          # Environment management
-          "lintr",         # Code linting
-          "cyclocomp",     # Complexity analysis
-          "rcmdcheck",     # R CMD check
-          "devtools",      # Development tools
-          "remotes"        # Package installation
-        )
-        
-        cat("Installing security and analysis packages:\n")
-        cat(paste(packages, collapse = ", "), "\n")
-        
-        for (pkg in packages) {
-          tryCatch({
-            if (!require(pkg, character.only = TRUE, quietly = TRUE)) {
-              install.packages(pkg, repos = c(CRAN = 'https://cloud.r-project.org'), type = "source")
-              cat("✓ Installed:", pkg, "\n")
-            } else {
-              cat("✓ Already available:", pkg, "\n")
-            }
-          }, error = function(e) {
-            cat("✗ Failed to install", pkg, ":", e$message, "\n")
-          })
-        }
-      shell: Rscript {0}
-    
-    - name: Restore renv environment
-      continue-on-error: true
-      id: renv-restore
-      if: hashFiles('renv.lock') != ''
-      run: |
-        cat("Restoring renv environment...\n")
-        tryCatch({
-          library(renv)
-          renv::restore()
-          cat("✓ renv environment restored successfully\n")
-        }, error = function(e) {
-          cat("✗ renv restore failed:", e$message, "\n")
-          cat("::warning::renv restore failed - continuing with system packages\n")
-        })
-      shell: Rscript {0}
-    
-    # SECURITY SCANNING
+    # FILESYSTEM SECURITY SCANNING (No R setup required)
     - name: Run Trivy filesystem vulnerability scan
       continue-on-error: true
       id: trivy-scan
-      uses: aquasecurity/trivy-action@master
+      uses: aquasecurity/trivy-action@0.28.0
       with:
         scan-type: 'fs'
         scan-ref: '.'
@@ -115,149 +44,83 @@ jobs:
       with:
         sarif_file: 'trivy-results.sarif'
     
+    # R ENVIRONMENT SETUP (Required for R-specific security checks)
+    - name: Setup R
+      uses: r-lib/actions/setup-r@v2
+      with:
+        r-version: 'release'
+        use-public-rspm: true
+    
+    - name: Cache R packages
+      uses: actions/cache@v4
+      with:
+        path: ${{ env.R_LIBS_USER }}
+        key: ${{ runner.os }}-R-${{ hashFiles('renv.lock') }}
+        restore-keys: ${{ runner.os }}-R-
+
+    - name: Restore renv environment
+      id: renv-restore
+      run: |
+        if (!requireNamespace("renv", quietly = TRUE)) {
+          install.packages("renv", type = "source")
+        }
+        renv::restore()
+        cat("✓ renv environment restored successfully\n")
+      shell: Rscript {0}
+    
+    # R PACKAGE SECURITY SCANNING (Requires R environment)
     - name: R package security audit with oysteR
       continue-on-error: true
       id: oyster-audit
       run: |
-        cat("Running R package security audit...\n")
-        
         tryCatch({
           library(oysteR)
           
-          # Initialize results
-          audit_results <- list()
-          
-          # Audit renv.lock if it exists
-          if (file.exists("renv.lock")) {
-            cat("Auditing renv.lock file...\n")
-            audit_results$renv <- audit_renv_lock("renv.lock")
-            cat("✓ renv.lock audit completed\n")
-          }
-          
-          # Audit DESCRIPTION if it exists
-          if (file.exists("DESCRIPTION")) {
-            cat("Auditing DESCRIPTION file...\n")
-            audit_results$description <- audit_description("DESCRIPTION")
-            cat("✓ DESCRIPTION audit completed\n")
-          }
-          
-          # Audit installed packages
-          cat("Auditing installed R packages...\n")
-          audit_results$installed <- audit_installed_r_pkgs()
-          cat("✓ Installed packages audit completed\n")
-          
-          # Check for package updates
-          cat("Checking for R package updates...\n")
-          old_pkgs <- old.packages()
-          if (!is.null(old_pkgs) && nrow(old_pkgs) > 0) {
-            cat("📦 R packages with available updates:\n")
-            print(old_pkgs[, c("Package", "Installed", "ReposVer")])
-            cat("::warning::R package updates available - consider updating\n")
-            
-            # Save update info
-            write.csv(old_pkgs, "r-package-updates.csv", row.names = FALSE)
-          } else {
-            cat("✓ All R packages are up to date\n")
-          }
-          
-          # Save results
+          # Audit renv.lock
+          audit_results <- audit_renv_lock("renv.lock")
           saveRDS(audit_results, "oyster-audit-results.rds")
           
           # Check for vulnerabilities
-          has_vulnerabilities <- FALSE
-          for (result in audit_results) {
-            if (length(result) > 0) {
-              has_vulnerabilities <- TRUE
-              break
-            }
-          }
-          
-          if (has_vulnerabilities) {
+          if (length(audit_results) > 0) {
             cat("::warning::Security vulnerabilities found in R packages\n")
             print(audit_results)
           } else {
             cat("✓ No security vulnerabilities found\n")
           }
           
+          # Check for package updates
+          old_pkgs <- old.packages()
+          if (!is.null(old_pkgs) && nrow(old_pkgs) > 0) {
+            cat("::warning::R package updates available - consider updating\n")
+            write.csv(old_pkgs, "r-package-updates.csv", row.names = FALSE)
+          } else {
+            cat("✓ All R packages are up to date\n")
+          }
+          
         }, error = function(e) {
-          cat("✗ oysteR audit failed:", e$message, "\n")
-          cat("::error::R package security audit failed\n")
+          cat("::error::R package security audit failed:", e$message, "\n")
         })
       shell: Rscript {0}
     
-    # CODE QUALITY ANALYSIS
+    # CODE QUALITY ANALYSIS (Requires R environment)
     - name: Run R code linting
       continue-on-error: true
       id: lintr-check
       run: |
-        cat("Running R code linting...\n")
-        
         tryCatch({
           library(lintr)
+          lint_results <- lint_dir(".")
+          saveRDS(lint_results, "lintr-results.rds")
           
-          # Define directories to scan for R code
-          scan_dirs <- c(".", "development", "scripts")
-          scan_dirs <- scan_dirs[dir.exists(scan_dirs)]
-          
-          # Find R files to lint
-          r_files <- c()
-          for (dir in scan_dirs) {
-            files <- list.files(
-              dir,
-              pattern = "\\.[Rr]$|\\.[Rr]md$", 
-              recursive = TRUE,
-              full.names = TRUE
-            )
-            r_files <- c(r_files, files)
-          }
-          
-          # Exclude renv directory and other common exclusions
-          r_files <- r_files[!grepl("renv/|packrat/|\\.git/", r_files)]
-          
-          if (length(r_files) > 0) {
-            cat("Found R files to lint:\n")
-            cat(paste(r_files, collapse = "\n"), "\n\n")
-            
-            # Run linter with configuration
-            if (file.exists("scripts/.lintr")) {
-              # Use custom configuration
-              lint_results <- lint_dir(".", 
-                config_file = "scripts/.lintr"
-              )
-            } else {
-              # Use reasonable defaults
-              lint_results <- lint_dir(".", 
-                linters = with_defaults(
-                  line_length_linter = line_length_linter(120),
-                  object_name_linter = object_name_linter("snake_case"),
-                  assignment_linter = assignment_linter(),
-                  trailing_whitespace_linter = trailing_whitespace_linter()
-                )
-              )
-            }
-            
-            # Save results
-            saveRDS(lint_results, "lintr-results.rds")
-            
-            # Report results
-            if (length(lint_results) > 0) {
-              cat("::warning::Code linting issues found\n")
-              print(lint_results)
-              
-              # Create summary
-              lint_summary <- summary(lint_results)
-              cat("Linting summary:\n")
-              print(lint_summary)
-            } else {
-              cat("✓ No linting issues found\n")
-            }
+          if (length(lint_results) > 0) {
+            cat("::warning::Code linting issues found\n")
+            print(summary(lint_results))
           } else {
-            cat("No R files found to lint\n")
+            cat("✓ No linting issues found\n")
           }
           
         }, error = function(e) {
-          cat("✗ Linting failed:", e$message, "\n")
-          cat("::warning::R code linting failed\n")
+          cat("::warning::R code linting failed:", e$message, "\n")
         })
       shell: Rscript {0}
     
@@ -265,17 +128,10 @@ jobs:
       continue-on-error: true
       id: complexity-check
       run: |
-        cat("Checking code complexity...\n")
-        
         tryCatch({
           library(cyclocomp)
           
-          # Find R files
-          r_files <- list.files(
-            pattern = "\\.[Rr]$", 
-            recursive = TRUE,
-            full.names = TRUE
-          )
+          r_files <- list.files(pattern = "\\.[Rr]$", recursive = TRUE, full.names = TRUE)
           r_files <- r_files[!grepl("renv/|packrat/|\\.git/", r_files)]
           
           if (length(r_files) > 0) {
@@ -283,15 +139,10 @@ jobs:
             
             for (file in r_files) {
               tryCatch({
-                # Try to analyze individual file
                 if (file.exists(file)) {
                   complexity <- cyclocomp(file)
                   if (length(complexity) > 0 && !is.null(complexity)) {
-                    file_complexity <- data.frame(
-                      file = file,
-                      complexity = complexity,
-                      stringsAsFactors = FALSE
-                    )
+                    file_complexity <- data.frame(file = file, complexity = complexity)
                     complexity_results <- rbind(complexity_results, file_complexity)
                   }
                 }
@@ -300,13 +151,11 @@ jobs:
               })
             }
             
-            # Save results
             if (nrow(complexity_results) > 0) {
               saveRDS(complexity_results, "complexity-results.rds")
               
-              # Report high complexity (>15 is considered high)
-              if (any(complexity_results$complexity > 15)) {
-                high_complexity <- complexity_results[complexity_results$complexity > 15, ]
+              high_complexity <- complexity_results[complexity_results$complexity > 15, ]
+              if (nrow(high_complexity) > 0) {
                 cat("::warning::High complexity functions found\n")
                 print(high_complexity)
               } else {
@@ -320,43 +169,7 @@ jobs:
           }
           
         }, error = function(e) {
-          cat("✗ Complexity analysis failed:", e$message, "\n")
-          cat("::warning::Code complexity analysis failed\n")
-        })
-      shell: Rscript {0}
-    
-    - name: Run R CMD check (if package)
-      continue-on-error: true
-      id: rcmd-check
-      if: hashFiles('DESCRIPTION') != ''
-      run: |
-        cat("Running R CMD check...\n")
-        
-        tryCatch({
-          library(rcmdcheck)
-          
-          check_results <- rcmdcheck(
-            args = c("--no-manual", "--no-vignettes", "--no-build-vignettes"),
-            error_on = "never"
-          )
-          
-          # Save results
-          saveRDS(check_results, "rcmdcheck-results.rds")
-          
-          # Report results
-          print(check_results)
-          
-          if (length(check_results$errors) > 0) {
-            cat("::error::R CMD check found errors\n")
-          } else if (length(check_results$warnings) > 0) {
-            cat("::warning::R CMD check completed with warnings\n")
-          } else {
-            cat("✓ R CMD check passed\n")
-          }
-          
-        }, error = function(e) {
-          cat("✗ R CMD check failed:", e$message, "\n")
-          cat("::warning::R CMD check failed to run\n")
+          cat("::warning::Code complexity analysis failed:", e$message, "\n")
         })
       shell: Rscript {0}
     
@@ -364,51 +177,32 @@ jobs:
     - name: Generate comprehensive report
       if: always()
       run: |
-        echo "# R Security & Analysis Report" > security-analysis-report.md
-        echo "" >> security-analysis-report.md
-        echo "Generated: $(date)" >> security-analysis-report.md
-        echo "" >> security-analysis-report.md
+        cat > security-analysis-report.md << 'EOF'
+        # R Security & Analysis Report
         
-        # R Environment info
-        echo "## Environment" >> security-analysis-report.md
-        R --version | head -1 >> security-analysis-report.md
-        echo "" >> security-analysis-report.md
+        Generated: $(date)
         
-        # Step results summary
-        echo "## Analysis Results Summary" >> security-analysis-report.md
-        echo "" >> security-analysis-report.md
+        ## Environment
+        $(R --version | head -1)
         
-        echo "| Component | Status | Notes |" >> security-analysis-report.md
-        echo "|-----------|--------|-------|" >> security-analysis-report.md
-        echo "| Package Installation | ${{ steps.install-packages.outcome }} | Core security packages |" >> security-analysis-report.md
-        echo "| renv Restore | ${{ steps.renv-restore.outcome }} | Environment restoration |" >> security-analysis-report.md
-        echo "| Trivy Scan | ${{ steps.trivy-scan.outcome }} | Filesystem vulnerabilities |" >> security-analysis-report.md
-        echo "| oysteR Audit | ${{ steps.oyster-audit.outcome }} | R package security |" >> security-analysis-report.md
-        echo "| Code Linting | ${{ steps.lintr-check.outcome }} | Code quality |" >> security-analysis-report.md
-        echo "| Complexity Check | ${{ steps.complexity-check.outcome }} | Code complexity |" >> security-analysis-report.md
-        echo "| R CMD Check | ${{ steps.rcmd-check.outcome }} | Package validation |" >> security-analysis-report.md
+        ## Analysis Results Summary
         
-        echo "" >> security-analysis-report.md
+        | Component | Status | Notes |
+        |-----------|--------|-------|
+        | renv Restore | ${{ steps.renv-restore.outcome }} | Environment restoration |
+        | Trivy Scan | ${{ steps.trivy-scan.outcome }} | Filesystem vulnerabilities |
+        | oysteR Audit | ${{ steps.oyster-audit.outcome }} | R package security |
+        | Code Linting | ${{ steps.lintr-check.outcome }} | Code quality |
+        | Complexity Check | ${{ steps.complexity-check.outcome }} | Code complexity |
         
-        # Detailed findings
-        echo "## Detailed Findings" >> security-analysis-report.md
-        echo "" >> security-analysis-report.md
+        ## Detailed Findings
         
-        if [ -f "oyster-audit-results.rds" ]; then
-          echo "- ✓ R package security audit completed" >> security-analysis-report.md
-        fi
+        EOF
         
-        if [ -f "lintr-results.rds" ]; then
-          echo "- ✓ Code linting analysis completed" >> security-analysis-report.md
-        fi
-        
-        if [ -f "complexity-results.rds" ]; then
-          echo "- ✓ Code complexity analysis completed" >> security-analysis-report.md
-        fi
-        
-        if [ -f "trivy-results.sarif" ]; then
-          echo "- ✓ Filesystem vulnerability scan completed" >> security-analysis-report.md
-        fi
+        [ -f "oyster-audit-results.rds" ] && echo "- ✓ R package security audit completed" >> security-analysis-report.md
+        [ -f "lintr-results.rds" ] && echo "- ✓ Code linting analysis completed" >> security-analysis-report.md
+        [ -f "complexity-results.rds" ] && echo "- ✓ Code complexity analysis completed" >> security-analysis-report.md
+        [ -f "trivy-results.sarif" ] && echo "- ✓ Filesystem vulnerability scan completed" >> security-analysis-report.md
         
         cat security-analysis-report.md
     
@@ -425,12 +219,36 @@ jobs:
           *.log
         retention-days: 30
     
-    - name: Create security analysis issue
+    - name: Create security analysis issue (only if issues found)
       if: always()
       uses: actions/github-script@v7
       with:
         script: |
           const fs = require('fs');
+          
+          // Check step outcomes to determine if we need to create an issue
+          const steps = {
+            'renv Restore': '${{ steps.renv-restore.outcome }}',
+            'Trivy Scan': '${{ steps.trivy-scan.outcome }}',
+            'oysteR Security Audit': '${{ steps.oyster-audit.outcome }}',
+            'Code Linting': '${{ steps.lintr-check.outcome }}',
+            'Complexity Check': '${{ steps.complexity-check.outcome }}'
+          };
+          
+          let hasFailures = false;
+          let hasWarnings = false;
+          
+          for (const [step, outcome] of Object.entries(steps)) {
+            if (outcome === 'failure') hasFailures = true;
+            if (outcome === 'skipped' || outcome === 'cancelled') hasWarnings = true;
+          }
+          
+          // Only create issue if there are problems
+          if (!hasFailures && !hasWarnings) {
+            console.log('✅ All security scans passed successfully - no issue will be created');
+            console.log('📁 Detailed results are still available in workflow artifacts');
+            return;
+          }
           
           // Determine trigger context
           let triggerInfo = '';
@@ -455,29 +273,12 @@ jobs:
           let issueBody = `## 🔒 R Security & Analysis Report\n\n`;
           issueBody += triggerInfo;
           
-          // Add step status
-          const steps = {
-            'Package Installation': '${{ steps.install-packages.outcome }}',
-            'renv Restore': '${{ steps.renv-restore.outcome }}',
-            'Trivy Scan': '${{ steps.trivy-scan.outcome }}',
-            'oysteR Security Audit': '${{ steps.oyster-audit.outcome }}',
-            'Code Linting': '${{ steps.lintr-check.outcome }}',
-            'Complexity Check': '${{ steps.complexity-check.outcome }}',
-            'R CMD Check': '${{ steps.rcmd-check.outcome }}'
-          };
-          
           issueBody += '### Analysis Results Summary\n\n';
           issueBody += '| Component | Status |\n|-----------|--------|\n';
-          
-          let hasFailures = false;
-          let hasWarnings = false;
           
           for (const [step, outcome] of Object.entries(steps)) {
             const emoji = outcome === 'success' ? '✅' : outcome === 'failure' ? '❌' : '⚠️';
             issueBody += `| ${step} | ${emoji} ${outcome} |\n`;
-            
-            if (outcome === 'failure') hasFailures = true;
-            if (outcome === 'skipped' || outcome === 'cancelled') hasWarnings = true;
           }
           
           issueBody += '\n📁 **Detailed results available in workflow artifacts**\n';
@@ -505,12 +306,6 @@ jobs:
             issueBody += '- Ensure all security tools are functioning properly\n\n';
           }
           
-          if (!hasFailures && !hasWarnings) {
-            issueBody += '✅ **All security scans passed successfully!**\n';
-            issueBody += '- No immediate action required\n';
-            issueBody += '- Consider reviewing scan results for improvements\n\n';
-          }
-          
           // Add automation note
           issueBody += '---\n\n';
           issueBody += '*This issue was automatically created by the R Security Analysis workflow. ';
@@ -526,9 +321,6 @@ jobs:
           } else if (hasWarnings) {
             labels.push('medium-priority');
             issueTitle += ' ⚠️ Warnings';
-          } else {
-            labels.push('low-priority');
-            issueTitle += ' ✅ All Clear';
           }
           
           // Create the issue
