@@ -3,7 +3,7 @@
   // SPDX-License-Identifier: GPL-3.0-or-later
 
   "name": "R Security Development Environment",
-  "image": "ghcr.io/rocker-org/devcontainer-features/r-apt:latest",
+  "image": "rocker/r-ver:4.3",
   
   "features": {
     "ghcr.io/rocker-org/devcontainer-features/r-apt:0.5.0": {
