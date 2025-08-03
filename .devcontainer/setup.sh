@@ -11,7 +11,7 @@ echo "🔧 Setting up R security development environment..."
 sudo apt-get update && sudo apt-get upgrade -y
 
 # Install minimal system dependencies required by renv packages
-sudo apt-get install -y 
+sudo apt-get install -y \
     libcurl4-openssl-dev
 
 # Install Trivy for security scanning
