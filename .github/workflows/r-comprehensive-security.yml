@@ -64,7 +64,7 @@ jobs:
         if (!requireNamespace("renv", quietly = TRUE)) {
           install.packages("renv", type = "source")
         }
-        renv::restore()
+        renv::restore(confirm = FALSE)
         cat("✓ renv environment restored successfully\n")
       shell: Rscript {0}
     
@@ -76,8 +76,16 @@ jobs:
         tryCatch({
           library(oysteR)
           
-          # Audit renv.lock
-          audit_results <- audit_renv_lock("renv.lock")
+          # Verify renv.lock exists and get absolute path
+          renv_lock_path <- file.path(getwd(), "renv.lock")
+          if (!file.exists(renv_lock_path)) {
+            stop("renv.lock file not found at: ", renv_lock_path)
+          }
+          
+          cat("Found renv.lock at:", renv_lock_path, "\n")
+          
+          # Audit renv.lock with absolute path
+          audit_results <- audit_renv_lock(renv_lock_path)
           saveRDS(audit_results, "oyster-audit-results.rds")
           
           # Check for vulnerabilities
@@ -99,6 +107,16 @@ jobs:
           
         }, error = function(e) {
           cat("::error::R package security audit failed:", e$message, "\n")
+          # Try alternative approach if oysteR fails
+          tryCatch({
+            cat("Attempting alternative package vulnerability check...\n")
+            # List installed packages for manual review
+            installed_pkgs <- installed.packages()[, c("Package", "Version")]
+            write.csv(installed_pkgs, "installed-packages.csv", row.names = FALSE)
+            cat("✓ Installed packages list saved to installed-packages.csv\n")
+          }, error = function(e2) {
+            cat("Alternative approach also failed:", e2$message, "\n")
+          })
         })
       shell: Rscript {0}
     
@@ -109,7 +127,23 @@ jobs:
       run: |
         tryCatch({
           library(lintr)
-          lint_results <- lint_dir(".")
+          
+          # Check if .lintr config exists and is valid
+          if (file.exists(".lintr")) {
+            cat("Using .lintr configuration file\n")
+            # Test if config is valid by attempting to read it
+            tryCatch({
+              lint_results <- lint_dir(".")
+            }, error = function(config_error) {
+              cat("::warning::.lintr config file has issues:", config_error$message, "\n")
+              cat("Falling back to default linters\n")
+              lint_results <<- lint_dir(".", linters = default_linters)
+            })
+          } else {
+            cat("No .lintr config found, using default linters\n")
+            lint_results <- lint_dir(".", linters = default_linters)
+          }
+          
           saveRDS(lint_results, "lintr-results.rds")
           
           if (length(lint_results) > 0) {
