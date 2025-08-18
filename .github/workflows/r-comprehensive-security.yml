@@ -24,7 +24,7 @@ jobs:
     
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
     
     # FILESYSTEM SECURITY SCANNING (No R setup required)
     - name: Run Trivy filesystem vulnerability scan
