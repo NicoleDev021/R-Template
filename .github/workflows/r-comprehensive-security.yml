@@ -40,7 +40,7 @@ jobs:
     - name: Upload Trivy results to GitHub Security tab
       continue-on-error: true
       if: steps.trivy-scan.outcome != 'skipped'
-      uses: github/codeql-action/upload-sarif@v3
+      uses: github/codeql-action/upload-sarif@v4
       with:
         sarif_file: 'trivy-results.sarif'
     
